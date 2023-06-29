@@ -62,10 +62,10 @@ class DATABASE_CONFIG {
 	public $default = array(
 		'datasource' => 'Database/Mysql',
 		'persistent' => false,
-		'host' => 'warpd-dbase',
+		'host' => 'localhost',
 		'login' => 'root',
-		'password' => 'root',
-		'database' => 'warpd',
+		'password' => '',
+		'database' => 'warpd_dev',
 		'prefix' => '',
 		//'encoding' => 'utf8',
 	);
