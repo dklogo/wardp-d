@@ -10,7 +10,7 @@ class OmcAdminController extends OmcAppController
 
     var $name = 'OmcAdmin';
     # set the model to use
-    var $uses = array('User','Group','Menu','MenuGroup','OmcCustomerUser','OmcCustomer' ,'OmcUserBdc', 'Depot', 'Omc', 'Bdc', 'BdcOmc', 'OmcPackage','ProductType');
+    var $uses = array('User','Group','Menu','MenuGroup','OmcCustomerUser','OmcCustomer' ,'OmcUserBdc', 'Depot', 'Omc', 'Bdc', 'BdcOmc', 'OmcPackage','ProductType','Truck');
     # Set the layout to use
     var $layout = 'omc_layout';
 
@@ -1115,5 +1115,167 @@ class OmcAdminController extends OmcAppController
 
         $this->set(compact('entity_users_filter'));
     }
+
+
+
+
+    function admin_truck($type = 'get')
+    {
+        $company_profile = $this->global_company;
+        $permissions = $this->action_permission;
+        if ($this->request->is('ajax')) {
+            $this->autoRender = false;
+            $this->autoLayout = false;
+            $authUser = $this->Auth->user();
+
+            switch ($type) {
+                case 'get' :
+                    /**  Get posted data */
+                    $page = isset($_POST['page']) ? $_POST['page'] : 1;
+                    /** The current page */
+                    $sortname = isset($_POST['sortname']) ? $_POST['sortname'] : 'id';
+                    /** Sort column */
+                    $sortorder = isset($_POST['sortorder']) ? $_POST['sortorder'] : 'desc';
+                    /** Sort order */
+                    $qtype = isset($_POST['qtype']) ? $_POST['qtype'] : '';
+                    /** Search column */
+                    $search_query = isset($_POST['query']) ? $_POST['query'] : '';
+                    /** Search string */
+                    $rp = isset($_POST['rp']) ? $_POST['rp'] : 10;
+                    $limit = $rp;
+                    $start = ($page - 1) * $rp;
+
+                    $condition_array = array('OmcCustomer.omc_id' => $company_profile['id'],'OmcCustomer.deleted' => 'n');
+                    if (!empty($search_query)) {
+                        if ($qtype == 'name') {
+                            /*$condition_array = array(
+                                'User.username' => $search_query,
+                                'User.deleted' => 'n'
+                            );*/
+                        }
+                        else {
+                            /* $condition_array = array(
+                                 "User.$qtype LIKE" => $search_query . '%',
+                                 'User.deleted' => 'n'
+                             );*/
+                        }
+                    }
+                    $contain = array(
+                        'District'=>array('fields' => array('District.id', 'District.name')),
+                        'Region'=>array('fields' => array('Region.id', 'Region.name'))
+                    );
+                    // $fields = array('User.id', 'User.username', 'User.first_name', 'User.last_name', 'User.group_id', 'User.active');
+                    $data_table = $this->OmcCustomer->find('all', array('conditions' => $condition_array, 'contain'=>$contain,'order' => "OmcCustomer.$sortname $sortorder", 'limit' => $start . ',' . $limit, 'recursive' => 1));
+                    $data_table_count = $this->OmcCustomer->find('count', array('conditions' => $condition_array, 'recursive' => -1));
+
+                    $total_records = $data_table_count;
+
+                    if ($data_table) {
+                        $return_arr = array();
+                        foreach ($data_table as $obj) {
+                            $return_arr[] = array(
+                                'id' => $obj['OmcCustomer']['id'],
+                                'cell' => array(
+                                    $obj['OmcCustomer']['id'],
+                                    $obj['OmcCustomer']['name'],
+                                    /*$obj['Region']['name'],
+                                    $obj['District']['name'],*/
+                                    $obj['OmcCustomer']['address'],
+                                    $obj['OmcCustomer']['telephone'],
+                                    $obj['OmcCustomer']['admin_username'],
+                                    '**********'//Password
+                                    /*$obj['OmcCustomer']['credit_limit'],
+                                    $obj['OmcCustomer']['credit_days']*/
+                                ),
+                                'extra_data' => array(//Sometime u need certain data to be stored on the main tr at the client side like the referencing table id for editing
+                                    'admin_username'=>$obj['OmcCustomer']['admin_username']
+                                )
+                            );
+                        }
+                        return json_encode(array('success' => true, 'total' => $total_records, 'page' => $page, 'rows' => $return_arr));
+                    }
+                    else {
+                        return json_encode(array('success' => false, 'total' => $total_records, 'page' => $page, 'rows' => array()));
+                    }
+
+                    break;
+
+                case 'save' :
+                    if ($_POST['id'] == 0) {//Mew
+                        if(!in_array('A',$permissions)){
+                            return json_encode(array('code' => 1, 'msg' => 'Access Denied.'));
+                        }
+                    }
+                    else{
+                        if(!in_array('E',$permissions)){
+                            return json_encode(array('code' => 1, 'msg' => 'Access Denied.'));
+                        }
+                    }
+                    //$old_admin_username = isset($_POST['extra']['admin_username'])? $_POST['extra']['admin_username']:'';
+                    //Check if username is in use
+                    if ($_POST['id'] == 0) {
+                        $res = $this->_validateUsername($company_profile['id'], $_POST['admin_username']);
+                        if ($res) {
+                            return json_encode(array('code' => 1, 'msg' => 'Username already exist.'));
+                        }
+                    }
+                    else{
+                        /*if($old_admin_username != $_POST['admin_username']){
+                            $res = $this->_validateUsername($company_profile['id'], $_POST['admin_username']);
+                            if ($res) {
+                                return json_encode(array('code' => 1, 'msg' => 'Username already exist.'));
+                            }
+                        }*/
+                    }
+
+                    $data = array('OmcCustomer' => $_POST);
+                    $data['OmcCustomer']['omc_id'] = $company_profile['id'];
+                    if($_POST['id'] == 0){
+                        $data['OmcCustomer']['created_by'] = $authUser['id'];
+                    }
+                    else{
+                        $data['OmcCustomer']['modified_by'] = $authUser['id'];
+                    }
+
+                    if ($this->OmcCustomer->save($this->sanitize($data))) {
+                        if($_POST['id'] > 0){
+                            $new_user = $_POST['name'];
+                            $log_description = $this->getLogMessage('ModifyCustomer')." (Customer: ".$new_user.")";
+                            $this->logActivity('Administration',$log_description);
+
+                            return json_encode(array('code' => 0, 'msg' => 'Data Updated!'));
+                        }
+                        else{
+                            //Create account for customer user
+                            $this->createCustomerAdminAccount($_POST['admin_username'],$_POST['admin_pass'],$this->OmcCustomer->id);
+
+                            $new_user = $_POST['name'];
+                            $log_description = $this->getLogMessage('CreateCustomer')." (Customer: ".$new_user.")";
+                            $this->logActivity('Administration',$log_description);
+
+                            return json_encode(array('code' => 0, 'msg' => 'Data Saved!', 'id'=>$this->OmcCustomer->id));
+                        }
+                        //echo json_encode(array('success' => 0, 'msg' => 'Data Saved'));
+                    } else {
+                        return json_encode(array('code' => 1, 'msg' => 'Some errors occurred.'));
+                    }
+                    break;
+
+                case 'delete':
+
+                    break;
+            }
+        }
+
+        $data = $this->get_region_district();
+        $regions_lists = $data['region'];
+        $district_lists = $data['district'];
+        $glbl_region_district = $data['region_district'];
+        //$location_list = $this->get_location_list();
+
+        $this->set(compact('regions_lists', 'district_lists','glbl_region_district','location_list'));
+
+    }
+
 
 }
